@@ -491,7 +491,6 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 #else
     inode->i_ctime = inode->i_mtime = inode->i_atime = current_time(inode);
 #endif
-    inode->i_ctime = inode->i_mtime = inode->i_atime = current_time(inode);
 
     if (filedata.is_directory)
     {
