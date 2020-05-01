@@ -70,14 +70,14 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino);
 
 static void vvsfs_put_super(struct super_block *sb)
 {
-    if (DEBUG) 
+    if (DEBUG)
         printk("vvsfs - put_super\n");
     return;
 }
 
 static int vvsfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
-  if (DEBUG) 
+  if (DEBUG)
     printk("vvsfs - statfs\n");
 
   buf->f_namelen = MAXNAME;
@@ -87,13 +87,13 @@ static int vvsfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 // vvsfs_readblock - reads a block from the block device (this will copy over
 //                   the top of inode)
 static int vvsfs_readblock(struct super_block *sb,
-                           int inum, 
+                           int inum,
                            struct vvsfs_inode *inode)
 {
     struct buffer_head *bh;
 
     if (DEBUG) printk("vvsfs - readblock : %d\n", inum);
-  
+
     bh = sb_bread(sb,inum);
     memcpy((void *) inode, (void *) bh->b_data, BLOCKSIZE);
     brelse(bh);
@@ -104,7 +104,7 @@ static int vvsfs_readblock(struct super_block *sb,
 // vvsfs_writeblock - write a block from the block device(this will just mark the block
 //                    as dirtycopy)
 static int vvsfs_writeblock(struct super_block *sb,
-                            int inum, 
+                            int inum,
                             struct vvsfs_inode *inode)
 {
     struct buffer_head *bh;
@@ -130,57 +130,57 @@ vvsfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 vvsfs_readdir(struct file *filp, struct dir_context *ctx)
 #endif
 {
-	struct inode *i;
-	struct vvsfs_inode dirdata;
-	int num_dirs;
-	struct vvsfs_dir_entry *dent;
-	int error, k;
+    struct inode *i;
+    struct vvsfs_inode dirdata;
+    int num_dirs;
+    struct vvsfs_dir_entry *dent;
+    int error, k;
 
-	if (DEBUG) printk("vvsfs - readdir\n");
+    if (DEBUG) printk("vvsfs - readdir\n");
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
-	i = filp->f_dentry->d_inode;
+    i = filp->f_dentry->d_inode;
 #else
-	i = file_inode(filp);
+    i = file_inode(filp);
 #endif
-	vvsfs_readblock(i->i_sb, i->i_ino, &dirdata);
-	num_dirs = dirdata.size / sizeof(struct vvsfs_dir_entry);
+    vvsfs_readblock(i->i_sb, i->i_ino, &dirdata);
+    num_dirs = dirdata.size / sizeof(struct vvsfs_dir_entry);
 
-	if (DEBUG) printk("Number of entries %d fpos %Ld\n", num_dirs, filp->f_pos);
+    if (DEBUG) printk("Number of entries %d fpos %Ld\n", num_dirs, filp->f_pos);
 
-	error = 0;
-	k=0;
-	dent = (struct vvsfs_dir_entry *) &dirdata.data;
-	while (!error && filp->f_pos < dirdata.size && k < num_dirs) 
-	{
-		printk("adding name : %s ino : %d\n",dent->name, dent->inode_number);
+    error = 0;
+    k=0;
+    dent = (struct vvsfs_dir_entry *) &dirdata.data;
+    while (!error && filp->f_pos < dirdata.size && k < num_dirs)
+    {
+        printk("adding name : %s ino : %d\n",dent->name, dent->inode_number);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
-		error = filldir(dirent, 
-		    dent->name, strlen(dent->name), filp->f_pos, dent->inode_number,DT_REG);
-		if (error)
-			break;
-		filp->f_pos += sizeof(struct vvsfs_dir_entry);
+        error = filldir(dirent,
+            dent->name, strlen(dent->name), filp->f_pos, dent->inode_number,DT_REG);
+        if (error)
+            break;
+        filp->f_pos += sizeof(struct vvsfs_dir_entry);
 #else
-		if (dent->inode_number) 
-		{
-			if (!dir_emit (ctx, dent->name, strnlen (dent->name, MAXNAME),
-				dent->inode_number, DT_UNKNOWN)) return 0;
-		}
-		ctx->pos += sizeof(struct vvsfs_dir_entry);
+        if (dent->inode_number)
+        {
+            if (!dir_emit (ctx, dent->name, strnlen (dent->name, MAXNAME),
+                dent->inode_number, DT_UNKNOWN)) return 0;
+        }
+        ctx->pos += sizeof(struct vvsfs_dir_entry);
 #endif
-		k++;
-		dent++;
-	}
-	// update_atime(i);
-	printk("done readdir\n");
+        k++;
+        dent++;
+    }
+    // update_atime(i);
+    printk("done readdir\n");
 
-	return 0;
+    return 0;
 }
 
 // vvsfs_lookup - A directory name in a directory. It basically attaches the inode 
 //                of the file to the directory entry.
 static struct dentry *vvsfs_lookup(struct inode *dir,
-                                   struct dentry *dentry, 
+                                   struct dentry *dentry,
                                    unsigned int flags)
 {
     int num_dirs;
@@ -518,7 +518,11 @@ static int vvsfs_fill_super(struct super_block *s, void *data, int silent)
 
     if (DEBUG) printk("vvsfs - fill super\n");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
     s->s_flags = MS_NOSUID | MS_NOEXEC;
+#else
+    s->s_flags = ST_NOSUID | SB_NOEXEC;
+#endif
     s->s_op = &vvsfs_ops;
 
     i = new_inode(s);
