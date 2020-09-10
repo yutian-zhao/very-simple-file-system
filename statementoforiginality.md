@@ -2,9 +2,9 @@
 
 
 Unless otherwise stated this code is entirely our work. 
-+ member 1
-+ member 2 (delete if not needed)
-+ member 3 (delete if not needed)
++ member 1 name and uni id
++ member 2 name and uni id (delete if not needed)
++ member 3 name and uni id (delete if not needed)
 
 Each member of the group should individually add and commit their name here as a signature of the above statement.  The last person can remove this comment. 
 
