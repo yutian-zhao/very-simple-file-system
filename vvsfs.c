@@ -258,6 +258,7 @@ struct inode *vvsfs_new_inode(const struct inode *dir, umode_t mode, int is_dir)
     if (!inode)
         return NULL;
 
+    inode_init_owner(inode, dir, mode);
     /* find a spare inode in the vvsfs */
     newinodenumber = vvsfs_empty_inode(sb);
     if (newinodenumber == -1)
@@ -275,7 +276,6 @@ struct inode *vvsfs_new_inode(const struct inode *dir, umode_t mode, int is_dir)
     printk("mode: %i uid: %i gid: %i\n", block.i_mode, block.i_uid, block.i_gid);
     vvsfs_writeblock(sb, newinodenumber, &block);
 
-    inode_init_owner(inode, dir, mode);
     inode->i_ino = newinodenumber;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
     inode->i_ctime = inode->i_mtime = inode->i_atime = CURRENT_TIME;
@@ -382,12 +382,30 @@ static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr)
         filedata.size = attr->ia_size; // int  // check if is directory
         vvsfs_writeblock(inode->i_sb, inode->i_ino, &filedata);
     }
-    
-    vvsfs_readblock(inode->i_sb, inode->i_ino, &filedata);
-    filedata.i_mode = inode->i_mode;
-    filedata.i_uid = i_uid_read(inode);
-    filedata.i_gid = i_gid_read(inode);
-    vvsfs_writeblock(inode->i_sb, inode->i_ino, &filedata);
+
+    if (attr->ia_valid & ATTR_MODE)
+    {
+        printk("vvsfs - setattr set mode");
+        vvsfs_readblock(inode->i_sb, inode->i_ino, &filedata);
+        filedata.i_mode = attr->ia_mode;
+        vvsfs_writeblock(inode->i_sb, inode->i_ino, &filedata);
+    }
+
+    if (attr->ia_valid & ATTR_UID)
+    {
+        printk("vvsfs - setattr set uid");
+        vvsfs_readblock(inode->i_sb, inode->i_ino, &filedata);
+        filedata.i_uid = attr->ia_uid.val;
+        vvsfs_writeblock(inode->i_sb, inode->i_ino, &filedata);
+    }
+
+    if (attr->ia_valid & ATTR_GID)
+    {
+        printk("vvsfs - setattr set gid");
+        vvsfs_readblock(inode->i_sb, inode->i_ino, &filedata);
+        filedata.i_gid = attr->ia_gid.val;
+        vvsfs_writeblock(inode->i_sb, inode->i_ino, &filedata);
+    }
 
     setattr_copy(inode, attr);
     mark_inode_dirty(inode);
@@ -590,7 +608,7 @@ static ssize_t vvsfs_file_write(struct file *filp,
     buf += count;
 
     inode->i_size = filedata.size;
-
+    inode->i_mode = filedata.i_mode;
     vvsfs_writeblock(sb, inode->i_ino, &filedata);
 
     if (DEBUG)
@@ -712,10 +730,6 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
     inode->i_mode = filedata.i_mode;
 
     inode->i_size = filedata.size;
-
-    i_uid_write(inode, filedata.i_uid);
-    i_gid_write(inode, filedata.i_gid);
-    inode->i_mode = filedata.i_mode;
 
     // inode->i_uid = (kuid_t) 0;
     // inode->i_gid = (kgid_t) 0;
