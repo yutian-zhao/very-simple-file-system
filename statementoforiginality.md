@@ -3,7 +3,7 @@
 
 Unless otherwise stated this code is entirely our work. 
 + Yutian Zhao (u648909)
-+ member 2 name and uni id (delete if not needed)
++ Hong Wang (u6535557)
 
 Each member of the group should individually add and commit their name here as a signature of the above statement.  The last person can remove this comment. 
 
