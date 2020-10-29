@@ -57,6 +57,7 @@
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <asm/uaccess.h>
+#include <linux/seq_file.h>
 
 #include "vvsfs.h"
 
@@ -69,6 +70,13 @@ static struct file_operations vvsfs_dir_operations;
 static struct super_operations vvsfs_ops;
 
 struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino);
+
+struct vvsfs_info {
+    int size;
+    int block_count;
+};
+
+static struct vvsfs_info vvsfs_info;
 
 static void vvsfs_put_super(struct super_block *sb)
 {
@@ -289,7 +297,9 @@ struct inode *vvsfs_new_inode(const struct inode *dir, umode_t mode, int is_dir)
     inode->i_op = NULL; //
 
     insert_inode_hash(inode);
-
+    // printk("vvsfs - new inode: size + : %i\n", inode->i_size);
+    vvsfs_info.size += inode->i_size;
+    vvsfs_info.block_count++;
     return inode;
 }
 
@@ -328,6 +338,9 @@ static int vvsfs_unlink(struct inode *dir, struct dentry *dentry)
             if (inode->i_nlink == 0)
             {
                 vvsfs_readblock(inode->i_sb, inode->i_ino, &filedata);
+                // printk("vvsfs - unlink: info - %i\n", filedata.size);
+                vvsfs_info.size -= filedata.size;
+                vvsfs_info.block_count--;
                 filedata.is_empty = 1;
                 filedata.is_directory = 0;
                 filedata.size = 0;
@@ -366,6 +379,7 @@ static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr)
         {
             return -1;
         }
+        int size_o = inode->i_size;
         printk("vvsfs - setattr try to set size: %ld\n", inode->i_ino);
         truncate_setsize(inode, attr->ia_size);
         printk("vvsfs - setattr try to set size: done");
@@ -379,6 +393,8 @@ static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr)
                 filedata.data[k] = '\0';
             }
         }
+        // printk("vvsfs - setattr: size_o %i, filedata size %i, attr size %i\n", size_o, filedata.size, attr->ia_size);
+        vvsfs_info.size += attr->ia_size - size_o;
         filedata.size = attr->ia_size; // int  // check if is directory
         vvsfs_writeblock(inode->i_sb, inode->i_ino, &filedata);
     }
@@ -607,6 +623,7 @@ static ssize_t vvsfs_file_write(struct file *filp,
     *ppos = pos;
     buf += count;
 
+    vvsfs_info.size += count;
     inode->i_size = filedata.size;
     inode->i_mode = filedata.i_mode;
     vvsfs_writeblock(sb, inode->i_ino, &filedata);
@@ -821,15 +838,36 @@ static struct file_system_type vvsfs_type =
         .fs_flags = FS_REQUIRES_DEV,
 };
 
+static int vvsfs_proc_show(struct seq_file *m, void *v)
+{
+    seq_printf(m, "Size: %i, Count: %i\n", vvsfs_info.size, vvsfs_info.block_count);
+    return 0;
+}
+
+static int vvsfs_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, vvsfs_proc_show, NULL);
+}
+
+static const struct file_operations vvsfs_proc_fops = {
+    .open = vvsfs_proc_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release};
+
 static int __init vvsfs_init(void)
 {
+    vvsfs_info.block_count = 0;
+    vvsfs_info.size = 0;
     printk("Registering vvsfs\n");
+    proc_create("vvsfs", 0, NULL, &vvsfs_proc_fops);
     return register_filesystem(&vvsfs_type);
 }
 
 static void __exit vvsfs_exit(void)
 {
     printk("Unregistering the vvsfs.\n");
+    remove_proc_entry("vvsfs", NULL);
     unregister_filesystem(&vvsfs_type);
 }
 
