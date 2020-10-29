@@ -64,6 +64,8 @@
 
 static struct inode_operations vvsfs_file_inode_operations;
 static struct file_operations vvsfs_file_operations;
+static struct inode_operations vvsfs_dir_inode_operations;
+static struct file_operations vvsfs_dir_operations;
 static struct super_operations vvsfs_ops;
 
 struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino);
@@ -225,7 +227,7 @@ static int vvsfs_empty_inode(struct super_block *sb) {
 }
 
 // vvsfs_new_inode - find and construct a new inode.
-struct inode * vvsfs_new_inode(const struct inode * dir, umode_t mode)
+struct inode * vvsfs_new_inode(const struct inode * dir, umode_t mode, int is_dir)
 {
     struct vvsfs_inode block;
     struct super_block * sb;
@@ -250,7 +252,7 @@ struct inode * vvsfs_new_inode(const struct inode * dir, umode_t mode)
 
     block.is_empty = false;
     block.size = 0;
-    block.is_directory = false;
+    block.is_directory = is_dir;
 
     vvsfs_writeblock(sb,newinodenumber,&block);
 
@@ -262,11 +264,153 @@ struct inode * vvsfs_new_inode(const struct inode * dir, umode_t mode)
     inode->i_ctime = inode->i_mtime = inode->i_atime = current_time(inode);
 #endif
 
-    inode->i_op = NULL;
+    inode->i_op = NULL; //
 
     insert_inode_hash(inode);
 
     return inode;
+}
+
+static int vvsfs_unlink(struct inode *dir, struct dentry *dentry){
+    int num_dirs;
+    int k;
+    struct vvsfs_inode dirdata;
+    struct inode *inode = NULL;
+    struct vvsfs_dir_entry *dent;
+    //
+    struct vvsfs_inode filedata;
+
+    vvsfs_readblock(dir->i_sb,dir->i_ino,&dirdata);
+    num_dirs = dirdata.size/sizeof(struct vvsfs_dir_entry);
+
+    for (k=0;k < num_dirs;k++) {
+        dent = (struct vvsfs_dir_entry *) ((dirdata.data) + k*sizeof(struct vvsfs_dir_entry));
+
+        if ((strlen(dent->name) == dentry->d_name.len) &&
+                strncmp(dent->name,dentry->d_name.name,dentry->d_name.len) == 0) {
+            inode = vvsfs_iget(dir->i_sb, dent->inode_number);
+
+            if (!inode)
+                return -1;
+	    
+	    memmove(dent, dent+sizeof(struct vvsfs_dir_entry), (num_dirs-k-1)*sizeof(struct vvsfs_dir_entry));
+	    dirdata.size = (num_dirs - 1) * sizeof(struct vvsfs_dir_entry);
+	    vvsfs_writeblock(dir->i_sb,dir->i_ino,&dirdata);
+	    dir->i_size = dirdata.size;
+    	    mark_inode_dirty(dir);
+            inode_dec_link_count(inode);
+	    if (inode->i_nlink==0){
+		        vvsfs_readblock(inode->i_sb,inode->i_ino,&filedata);
+                filedata.is_empty = 1;
+                filedata.size = 0;
+                vvsfs_writeblock(inode->i_sb,inode->i_ino,&filedata);
+	    }
+            return 0;
+
+        }
+    }
+    return 0;
+
+
+}
+
+// vvsfs_setattr - set attr for an inode
+static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr){
+    struct inode *inode = d_inode(dentry);
+    int error;
+    //
+    struct vvsfs_inode filedata;
+    int k;
+
+	error = setattr_prepare(dentry, attr);
+	if (error)
+		return error;
+    printk("vvsfs - setattr : %s\n",dentry->d_name.name);
+
+	if ((attr->ia_valid & ATTR_SIZE) &&
+	    attr->ia_size != i_size_read(inode)) {
+		error = inode_newsize_ok(inode, attr->ia_size);
+		if (error)
+			return error;
+
+        // return error when size is larger then max file size
+        if (attr->ia_size > MAXFILESIZE){
+            return -1;
+        }
+        printk("vvsfs - setattr try to set size: %ld\n",inode->i_ino);
+		truncate_setsize(inode, attr->ia_size);
+        printk("vvsfs - setattr try to set size: done");
+		// vvsfs_truncate(inode);
+        vvsfs_readblock(inode->i_sb,inode->i_ino,&filedata);
+        if (filedata.size < attr->ia_size){
+            for (k = filedata.size; k < attr->ia_size; k++){
+                filedata.data[k] = '\0';
+            }
+        }
+        filedata.size = attr->ia_size; // int  // check if is directory
+        vvsfs_writeblock(inode->i_sb,inode->i_ino,&filedata);
+        
+	}
+
+	setattr_copy(inode, attr);
+	mark_inode_dirty(inode);
+	return 0;
+}
+
+// vvsfs_create - create a new directory in a directory 
+static int vvsfs_mkdir(struct inode * dir, struct dentry *dentry, umode_t mode){
+    struct vvsfs_inode dirdata;
+    int num_dirs;
+    struct vvsfs_dir_entry *dent;
+    // struct vvsfs_inode new_dir;
+
+    struct inode * inode;
+
+    if (DEBUG) printk("vvsfs - mkdir : %s\n",dentry->d_name.name);
+
+    inode = vvsfs_new_inode(dir, S_IRUGO|S_IWUGO|S_IXUGO|S_IFDIR, 1);  // S_IFDIR S_IRUGO|S_IWUGO|S_IXUGO|S_IFDIR;
+    // printk("vvsfs - mkdir : %d\n", S_ISDIR(inode->i_mode));
+    if (!inode)
+        return -ENOSPC;
+    inode->i_op = &vvsfs_dir_inode_operations; 
+    inode->i_fop = &vvsfs_dir_operations;
+    // inode->i_mode = mode;
+
+    /* get an vfs inode */
+    if (!dir) return -1;
+
+    vvsfs_readblock(dir->i_sb,dir->i_ino,&dirdata);
+    num_dirs = dirdata.size/sizeof(struct vvsfs_dir_entry);
+    dent = (struct vvsfs_dir_entry *) ((dirdata.data) +
+                                       num_dirs*sizeof(struct vvsfs_dir_entry));
+
+    strncpy(dent->name, dentry->d_name.name,dentry->d_name.len);
+    dent->name[dentry->d_name.len] = '\0';
+
+
+    dirdata.size = (num_dirs + 1) * sizeof(struct vvsfs_dir_entry);
+
+    // update i_size
+    dir->i_size = dirdata.size;
+    
+    //
+
+
+    dent->inode_number = inode->i_ino;
+
+
+    vvsfs_writeblock(dir->i_sb,dir->i_ino,&dirdata);
+    
+    // 
+    inode_inc_link_count(dir);
+    inode_inc_link_count(inode);
+    mark_inode_dirty(dir);
+    mark_inode_dirty(inode);
+
+    d_instantiate(dentry, inode);
+
+    printk("Dir created %ld\n",inode->i_ino);
+    return 0;
 }
 
 // vvsfs_create - create a new file in a directory 
@@ -283,12 +427,12 @@ static int vvsfs_create(struct inode *dir,
 
     if (DEBUG) printk("vvsfs - create : %s\n",dentry->d_name.name);
 
-    inode = vvsfs_new_inode(dir, S_IRUGO|S_IWUGO|S_IFREG);
+    inode = vvsfs_new_inode(dir, S_IRUGO|S_IWUGO|S_IFREG, 0);  // S_IFDIR
     if (!inode)
         return -ENOSPC;
-    inode->i_op = &vvsfs_file_inode_operations;
+    inode->i_op = &vvsfs_file_inode_operations; 
     inode->i_fop = &vvsfs_file_operations;
-    inode->i_mode = mode;
+    inode->i_mode = mode; // NO NEED
 
     /* get an vfs inode */
     if (!dir) return -1;
@@ -304,11 +448,20 @@ static int vvsfs_create(struct inode *dir,
 
     dirdata.size = (num_dirs + 1) * sizeof(struct vvsfs_dir_entry);
 
+    // update i_size
+    dir->i_size = dirdata.size;
+    
+    //
+
 
     dent->inode_number = inode->i_ino;
 
 
     vvsfs_writeblock(dir->i_sb,dir->i_ino,&dirdata);
+    
+    // 
+    mark_inode_dirty(dir);
+    mark_inode_dirty(inode);
 
     d_instantiate(dentry, inode);
 
@@ -443,6 +596,7 @@ static struct file_operations vvsfs_file_operations =
 };
 
 static struct inode_operations vvsfs_file_inode_operations = {
+    .setattr    = vvsfs_setattr,
 };
 
 static struct file_operations vvsfs_dir_operations =
@@ -459,6 +613,8 @@ static struct file_operations vvsfs_dir_operations =
 
 static struct inode_operations vvsfs_dir_inode_operations = {
     create: vvsfs_create,           /* create */
+    unlink: vvsfs_unlink,
+    mkdir: vvsfs_mkdir,
     lookup: vvsfs_lookup,           /* lookup */
 };
 
