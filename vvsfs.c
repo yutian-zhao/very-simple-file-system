@@ -253,6 +253,9 @@ struct inode * vvsfs_new_inode(const struct inode * dir, umode_t mode, int is_di
     block.is_empty = false;
     block.size = 0;
     block.is_directory = is_dir;
+    block.i_mode = mode;
+    block.i_uid = i_uid_read(inode);
+    block.i_gid = i_gid_read(inode);
 
     vvsfs_writeblock(sb,newinodenumber,&block);
 
@@ -264,6 +267,9 @@ struct inode * vvsfs_new_inode(const struct inode * dir, umode_t mode, int is_di
     inode->i_ctime = inode->i_mtime = inode->i_atime = current_time(inode);
 #endif
 
+    i_uid_write(inode, block.i_uid);
+    i_gid_write(inode, block.i_gid);
+    inode->i_mode = block.i_mode;
     inode->i_op = NULL; //
 
     insert_inode_hash(inode);
@@ -342,6 +348,11 @@ static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr){
         printk("vvsfs - setattr try to set size: done");
 		// vvsfs_truncate(inode);
         vvsfs_readblock(inode->i_sb,inode->i_ino,&filedata);
+
+        filedata.i_mode = inode->i_mode;
+        filedata.i_uid = i_uid_read(inode);
+        filedata.i_gid = i_gid_read(inode);
+
         if (filedata.size < attr->ia_size){
             for (k = filedata.size; k < attr->ia_size; k++){
                 filedata.data[k] = '\0';
@@ -637,8 +648,15 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
         return inode;
 
     vvsfs_readblock(inode->i_sb,inode->i_ino,&filedata);
+    i_uid_write(inode, filedata.i_uid);
+    i_gid_write(inode, filedata.i_gid);
+    inode->i_mode = filedata.i_mode;
 
     inode->i_size = filedata.size;
+
+    i_uid_write(inode, filedata.i_uid);
+    i_gid_write(inode, filedata.i_gid);
+    inode->i_mode = filedata.i_mode;
 
     // inode->i_uid = (kuid_t) 0;
     // inode->i_gid = (kgid_t) 0;
