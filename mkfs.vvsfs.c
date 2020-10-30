@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <unistd.h>
+// #include <linux/stat.h>
 
 #include "vvsfs.h"
 
@@ -49,12 +50,16 @@ int main(int argc, char ** argv)
         {  // the first block is an empty directory
             inode.is_empty = 0;
             inode.is_directory = 1;
+            inode.i_mode = 0777|S_IFDIR;
         }
         else
         {
             inode.is_empty = 1;
             inode.is_directory = 0;
+            inode.i_mode = 0;
         }
+        inode.i_gid = 0;
+        inode.i_uid = 0;
         inode.size = 0;
         for (k = 0;k< MAXFILESIZE;k++)
             inode.data[k] = 0;
