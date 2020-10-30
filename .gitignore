@@ -8,3 +8,8 @@ Module.symvers
 modules.order
 .tmp_versions
 
+.cache.mk
+mkfs.vvsfs
+myvvsfs.raw
+truncate
+view.vvsfs
