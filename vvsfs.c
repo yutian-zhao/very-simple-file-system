@@ -75,7 +75,8 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino);
 struct vvsfs_info
 {
     int size;
-    int block_count;
+    int file_count;
+    int dir_count;
 };
 
 static struct vvsfs_info vvsfs_info;
@@ -304,7 +305,6 @@ struct inode *vvsfs_new_inode(const struct inode *dir, umode_t mode, int is_dir)
     insert_inode_hash(inode);
     // printk("vvsfs - new inode: size + : %i\n", inode->i_size);
     vvsfs_info.size += inode->i_size;
-    vvsfs_info.block_count++;
     return inode;
 }
 
@@ -356,7 +356,7 @@ static int vvsfs_unlink(struct inode *dir, struct dentry *dentry)
                 // printk("vvsfs - unlink: info - %i\n", filedata.size);
                 // update proc info
                 vvsfs_info.size -= filedata.size;
-                vvsfs_info.block_count--;
+                vvsfs_info.file_count--;
                 // clear deleted file data.
                 filedata.is_empty = 1;
                 filedata.is_directory = 0;
@@ -479,6 +479,8 @@ static int vvsfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 
     vvsfs_writeblock(dir->i_sb, dir->i_ino, &dirdata);
 
+    vvsfs_info.dir_count++;
+
     inode_inc_link_count(dir);
     inode_inc_link_count(inode);
     mark_inode_dirty(dir);
@@ -519,6 +521,8 @@ static int vvsfs_rmdir(struct inode *dir, struct dentry *dentry)
                 vvsfs_writeblock(inode->i_sb, inode->i_ino, &dirdata);
                 mark_inode_dirty(inode);
             }
+            //update dir count
+            vvsfs_info.dir_count--;
         }
     }
     return err;
@@ -629,6 +633,8 @@ static int vvsfs_create(struct inode *dir,
     dir->i_size = dirdata.size;
 
     dent->inode_number = inode->i_ino;
+
+    vvsfs_info.file_count++;
 
     vvsfs_writeblock(dir->i_sb, dir->i_ino, &dirdata);
 
@@ -924,7 +930,11 @@ static struct file_system_type vvsfs_type =
 // author: Hong Wang
 static int vvsfs_proc_show(struct seq_file *m, void *v)
 {
-    seq_printf(m, "Size: %i, Count: %i\n", vvsfs_info.size, vvsfs_info.block_count);
+    printk("vvsfs - proc show\n");
+    seq_printf(m, "File Size: %i, File Count: %i, Directory Count: %i\n",
+               vvsfs_info.size,
+               vvsfs_info.file_count,
+               vvsfs_info.dir_count);
     return 0;
 }
 
@@ -941,8 +951,9 @@ static const struct file_operations vvsfs_proc_fops = {
 
 static int __init vvsfs_init(void)
 {
-    vvsfs_info.block_count = 0;
+    vvsfs_info.file_count = 0;
     vvsfs_info.size = 0;
+    vvsfs_info.dir_count = 0;
     printk("Registering vvsfs\n");
     proc_create("vvsfs", 0, NULL, &vvsfs_proc_fops);
     return register_filesystem(&vvsfs_type);
