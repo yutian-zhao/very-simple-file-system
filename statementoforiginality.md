@@ -8,4 +8,4 @@ Unless otherwise stated this code is entirely our work.
 
 Please reference any material you used in completing this assignment here (also reference it within the source code that it is used).   Once done this line can also be removed. 
 
-+ Minix source code: source/fs/minix/namei.c
++ Minix source code: source/fs/minix/*.c
