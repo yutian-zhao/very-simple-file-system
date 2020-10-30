@@ -41,7 +41,12 @@
  * remove the module:
  *    sudo rmmod vvsfs
  */
-
+/*
+    Modified By:
+    Yutian Zhao (u6489809)
+    Hong Wang (u6535557)
+    Oct, 2020
+*/
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
@@ -250,6 +255,7 @@ static int vvsfs_empty_inode(struct super_block *sb)
 }
 
 // vvsfs_new_inode - find and construct a new inode.
+// Modified by Yutian Zhao, Hong Wang
 struct inode *vvsfs_new_inode(const struct inode *dir, umode_t mode, int is_dir)
 {
     struct vvsfs_inode block;
@@ -303,11 +309,15 @@ struct inode *vvsfs_new_inode(const struct inode *dir, umode_t mode, int is_dir)
     inode->i_gid.val = block.i_gid;
 
     insert_inode_hash(inode);
-    // printk("vvsfs - new inode: size + : %i\n", inode->i_size);
     vvsfs_info.size += inode->i_size;
     return inode;
 }
 
+/* unlink
+    Author: Yutian Zhao
+    Reference: vvsfs_lookup
+    Modified: Hong Wang
+*/
 static int vvsfs_unlink(struct inode *dir, struct dentry *dentry)
 {
     int num_dirs;
@@ -353,7 +363,6 @@ static int vvsfs_unlink(struct inode *dir, struct dentry *dentry)
             if (inode->i_nlink == 0)
             {
                 vvsfs_readblock(inode->i_sb, inode->i_ino, &filedata);
-                // printk("vvsfs - unlink: info - %i\n", filedata.size);
                 // update proc info
                 vvsfs_info.size -= filedata.size;
                 vvsfs_info.file_count--;
@@ -373,7 +382,10 @@ static int vvsfs_unlink(struct inode *dir, struct dentry *dentry)
     return -ENOENT;
 }
 
-// vvsfs_setattr - set attr for an inode
+/* vvsfs_setattr - set attr for an inode
+    Author: Yutian Zhao
+    Modified: Hong Wang
+*/
 static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr)
 {
     struct inode *inode = d_inode(dentry);
@@ -404,7 +416,6 @@ static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr)
         printk("vvsfs - setattr try to set size: %ld\n", inode->i_ino);
         truncate_setsize(inode, attr->ia_size);
         printk("vvsfs - setattr try to set size: done");
-        // vvsfs_truncate(inode);
         vvsfs_readblock(inode->i_sb, inode->i_ino, &filedata);
 
         // empty shortened space
@@ -415,7 +426,6 @@ static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr)
                 filedata.data[k] = '\0';
             }
         }
-        // printk("vvsfs - setattr: size_o %i, filedata size %i, attr size %i\n", size_o, filedata.size, attr->ia_size);
         vvsfs_info.size += attr->ia_size - size_o;
         filedata.size = attr->ia_size; // int  // check if is directory
         vvsfs_writeblock(inode->i_sb, inode->i_ino, &filedata);
@@ -438,12 +448,13 @@ static int vvsfs_setattr(struct dentry *dentry, struct iattr *attr)
 }
 
 // vvsfs_create - create a new directory in a directory
+// Author: Yutian Zhao
+// Modified: Hone Wang
 static int vvsfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 {
     struct vvsfs_inode dirdata;
     int num_dirs;
     struct vvsfs_dir_entry *dent;
-    // struct vvsfs_inode new_dir;
 
     struct inode *inode;
 
@@ -451,7 +462,6 @@ static int vvsfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
         printk("vvsfs - mkdir : %s\n", dentry->d_name.name);
 
     inode = vvsfs_new_inode(dir, mode | S_IFDIR, 1);
-    // printk("vvsfs - mkdir : %d\n", S_ISDIR(inode->i_mode));
 
     if (!inode)
         return -ENOSPC;
@@ -493,6 +503,7 @@ static int vvsfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 }
 
 // remove directory
+// Author: Yutian Zhao
 static int vvsfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
     struct inode *inode = d_inode(dentry);
@@ -529,6 +540,7 @@ static int vvsfs_rmdir(struct inode *dir, struct dentry *dentry)
 }
 
 // vvsfs_mknod - create a device special file
+// Author: Yutian Zhao
 static int vvsfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode, dev_t rdev)
 {
     struct vvsfs_inode dirdata;
@@ -540,17 +552,12 @@ static int vvsfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode, d
     if (DEBUG)
         printk("vvsfs - mknod : %s\n", dentry->d_name.name);
 
-    // inode = vvsfs_new_inode(dir, S_IRUGO|S_IWUGO|S_IXUGO|mode, 0);  // S_IFDIR
-    // if (DEBUG) printk("vvsfs - mknod finish creating new inode\n");
-    // if (!inode)
-    //     return -ENOSPC;
-    // init_special_inode(inode, inode->i_mode, rdev);
-    inode = vvsfs_new_inode(dir, S_IRUGO | S_IWUGO | S_IFREG, 0); // S_IFDIR
+    inode = vvsfs_new_inode(dir, S_IRUGO | S_IWUGO | S_IFREG, 0);
     if (!inode)
         return -ENOSPC;
     inode->i_op = &vvsfs_file_inode_operations;
     inode->i_fop = &vvsfs_file_operations;
-    inode->i_mode = mode; // NO NEED
+    inode->i_mode = mode;
     init_special_inode(inode, inode->i_mode, rdev);
 
     if (DEBUG)
@@ -573,15 +580,12 @@ static int vvsfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode, d
     // update i_size
     dir->i_size = dirdata.size;
 
-    //
-
     dent->inode_number = inode->i_ino;
 
     vvsfs_writeblock(dir->i_sb, dir->i_ino, &dirdata);
     if (DEBUG)
         printk("vvsfs - mknod finish writing to dir: %ld\n", inode->i_ino);
 
-    //
     mark_inode_dirty(dir);
     mark_inode_dirty(inode);
     if (DEBUG)
@@ -608,12 +612,11 @@ static int vvsfs_create(struct inode *dir,
     if (DEBUG)
         printk("vvsfs - create : %s\n", dentry->d_name.name);
 
-    inode = vvsfs_new_inode(dir, mode | S_IFREG, 0); // S_IRUGO|S_IWUGO|S_IFREG
+    inode = vvsfs_new_inode(dir, mode | S_IFREG, 0);
     if (!inode)
         return -ENOSPC;
     inode->i_op = &vvsfs_file_inode_operations;
     inode->i_fop = &vvsfs_file_operations;
-    // inode->i_mode = mode|S_IFREG; // NO NEED
 
     /* get an vfs inode */
     if (!dir)
@@ -806,6 +809,7 @@ static struct inode_operations vvsfs_dir_inode_operations = {
 };
 
 // vvsfs_iget - get the inode from the super block
+// Modified: Hong Wang, Yutian Zhao
 struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 {
     struct inode *inode;
@@ -838,13 +842,11 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 
     if (filedata.is_directory)
     {
-        // inode->i_mode = S_IRUGO|S_IWUGO|S_IFDIR;
         inode->i_op = &vvsfs_dir_inode_operations;
         inode->i_fop = &vvsfs_dir_operations;
     }
     else
     {
-        // inode->i_mode = S_IRUGO|S_IWUGO|S_IFREG;
         inode->i_op = &vvsfs_file_inode_operations;
         inode->i_fop = &vvsfs_file_operations;
     }
@@ -855,11 +857,11 @@ struct inode *vvsfs_iget(struct super_block *sb, unsigned long ino)
 
 // vvsfs_fill_super - read the super block (this is simple as we do not
 //                    have one in this file system)
+// Modified: Yutian Zhao
 static int vvsfs_fill_super(struct super_block *s, void *data, int silent)
 {
     struct inode *i;
     int hblock;
-    //
     struct vvsfs_inode dirdata;
 
     if (DEBUG)
@@ -877,7 +879,6 @@ static int vvsfs_fill_super(struct super_block *s, void *data, int silent)
     i->i_sb = s;
     i->i_ino = 0;
     i->i_flags = 0;
-    // i->i_mode = S_IRUGO|S_IWUGO|S_IXUGO|S_IFDIR;
     i->i_op = &vvsfs_dir_inode_operations;
     i->i_fop = &vvsfs_dir_operations;
 
