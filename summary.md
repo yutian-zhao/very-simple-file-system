@@ -15,18 +15,20 @@ The assignment is done by 2 people collaboratively, most tasks are more or less 
 
 ## Remove files
 
-vvsfs_unlink directory node operation. By removing a file, the inode should be reset and the dentry should be deleted.
+Remove files is associated with vvsfs_unlink directory node operation. By removing a file, the inode should be reset and the dentry should be deleted.
 In order to achieve this, first we need to look up the inode by the dentry, decrease the link count and if 0, clean the inode.
 
 ## Truncate files
 
-vvsfs_setattr file operation. By truncating, it can extend a file with "/0"s, shrink a file by cutting its tail
-or create a new one if no exist. It's not allowed to truncate a file to exceed the maximum file size.
+Truncate files is associated with vvsfs_setattr file operation. By truncating, it can extend a file with "/0"s, shrink a file by cutting its tail
+or create a new one if no exist. It's not allowed to truncate a file to exceed the maximum file size. When the file size needs to be changed, the setattr operation
+will set the inode size. If found changed, the file data will be truncate accordingly.
 
 ## Create directories
 
-vvsfs_mkdir directory node operation. It's similar to create files, except: it should be marked as directory, its mode should be directory, 
-the operation for it should be directory operations.
+Create directories is associated with vvsfs_mkdir directory node operation. Basically, it creates a new sub-directory where you can create directories and files inside.
+It's similar to create files, except: it should be marked as directory, its mode should be directory, the operation for it should be directory operations.
+
 
 ## Remove direcotries
 vvsfs_rmdir directory node operation.  It's similar to remove files, except it checks if it's empty.
@@ -37,8 +39,7 @@ setattr operation will set permission for inode and we store the changed permiss
 everytime mounting the file system the permission is persist.
 
 ## Add device nodes
-vvsfs_mknod file operation. This operation enables our file system to support sepcial device like char/block device. Our design is that the
-device node should not be stored in the disk and should disappear after unmounting. Thus we create inode and add it to dentry but not store it in the disk.
+vvsfs_mknod file operation. This operation enables our file system to support sepcial device like char/block device. 
 The key thing here is to call init_special_inode, which will associate the file with special operations, which will forward the operation to the 
 device driver. We test it on the special system driver like /dev/zeros and ramp device driver we wrote for lab 5. We can read and write to it to change its content.
 
