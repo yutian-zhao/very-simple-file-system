@@ -64,3 +64,21 @@ $ echo ob > ob
 $ cat /proc/vvsfs
 File Size: 3, File Count: 1, Directory Count: 2
 ```
+
+
+# Marker's notes:
+
+ - 9,7,7,8 = 31, 
+ - SoO is signed (one ref wothout a link); 
+ - git commit history is short (last two days); 
+ - summary has good balance about the process and impl. details; extensions - dev. file + proc-entry + exec-files + FS memmap;
+ - how the default permission is chosen?  
+ - all basics work fine;
+ - files are reproduced after remount; 
+ - dev. file looses its mode after remount (becomes an emtpy file); 
+ - proc-entry work OK (easy task); 
+ - the code is neat and reads well
+
+
+
+
