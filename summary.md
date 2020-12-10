@@ -1,6 +1,6 @@
 # VVSFS
 
-In this assignment, we have achieved the following things:
+In this very simple file system, we have achieved the following things:
 *  remove and truncate files
 *  create and remove directories
 *  store user id, group id and permissions (including root, directories and files)
@@ -9,7 +9,7 @@ In this assignment, we have achieved the following things:
 *  enable mmap functionality (enable the default mmap operation)
 *  Add a proc entry to inform users of the number of inodes and the amount memory the filesystem is currently using.
 
-The assignment is done by 2 people collaboratively, most tasks are more or less distributed by both. Overall, the task distribution is as follows:
+The project is done by 2 people collaboratively, most tasks are more or less distributed by both. Overall, the task distribution is as follows:
 *  Yutian Zhao (u6489809): remove and truncate files, create and remove directories, fix to hold permission after remounting, add device node.
 *  Hong Wang (u6535557): enable storing permissions, add a proc entry, debug and polish the code.
 
